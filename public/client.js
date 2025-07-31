@@ -48,10 +48,12 @@ button.addEventListener("click", () => {
         localVideo.srcObject = stream;
         localVideo.play();
 
-        ws.send(JSON.stringify({ type: "join", roomId, name }));
+        ws.send(JSON.stringify({ type: "joinRoom", roomId, name }));
         })
         .catch((error) => {
             console.error("Error accessing media devices.", error);
         });
     
 })
+
+//handelling the incoming stream from the server
