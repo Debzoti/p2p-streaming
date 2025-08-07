@@ -30,17 +30,25 @@ wss.on('connection', (ws: WebSocket) => {
     (ws as WebSocketWithId).id = uuid // Assign a unique ID to the WebSocket connection
   console.log('New client connected', ws.id);
 
-  ws.on('message', (message) => {
+  ws.on('message', (message: WebSocket.data) => {
     console.log(`Received message: ${message}`);
     // Broadcast the message to all connected clients
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
+    // wss.clients.for Each((client) => {
+    //   if (client.readyState === WebSocket.OPEN) {
+    //     client.send(message);
+    //   }
+
+    let parsedData:WebSocket.data;
+    try {
+      parsedData = JSON.parse(message.toString());
+    } catch (err) {
+      console.error('Invalid JSON:', err);
+      return;
+    }
 
 
       //handle logic if user joinroom
-      const data = JSON.parse(message.toString());
+      const data = parsedData;
       const { type} = data;
       console.log(type);
       
@@ -85,7 +93,10 @@ wss.on('connection', (ws: WebSocket) => {
             roomId: roomIdNumber,
             users: rooms[roomIdNumber].map(user => ({ id: user.id, name: user.name })),
           };
-          ws.send(JSON.stringify({ type: 'roomInfo', roomInfo }));
+          ws.send(JSON.stringify({
+             type: 'roomInfo',
+              roomInfo 
+            }));
           console.log(`User ${name} joined room ${roomIdNumber}`);
           break;
         }
@@ -102,8 +113,8 @@ wss.on('connection', (ws: WebSocket) => {
               .find(client => 
                   (client as WebSocketWithId).id === user.id);
           
-              if (client && client.readyState === WebSocket.OPEN) {
-                  client.send(JSON.stringify(
+              if (client && ( client as WebSocket).readyState === WebSocket.OPEN) {
+                ( client as WebSocket).send(JSON.stringify(
                       { 
                       type: 'offer', 
                       offer,
@@ -129,8 +140,8 @@ wss.on('connection', (ws: WebSocket) => {
                 const client = Array.from(wss.clients)
                   .find(client => (client as WebSocketWithId).id === user.id);
           
-                if (client && client.readyState === WebSocket.OPEN) {
-                  client.send(JSON.stringify({
+                if (client && ( client as WebSocket).readyState === WebSocket.OPEN) {
+                  ( client as WebSocket).send(JSON.stringify({
                     type: 'answer',
                     answer,
                     from: (ws as WebSocketWithId).id
@@ -141,7 +152,7 @@ wss.on('connection', (ws: WebSocket) => {
           }
           break;
         }
-        case "candidate": {
+        case "iceCandidate": {
 
           const { roomId, candidate } = data;
           const roomIdNumber = parseInt(roomId, 10);
@@ -153,9 +164,9 @@ wss.on('connection', (ws: WebSocket) => {
                 const client = Array.from(wss.clients)
                   .find(client => (client as WebSocketWithId).id === user.id);
           
-                if (client && client.readyState === WebSocket.OPEN) {
-                  client.send(JSON.stringify({
-                    type: 'candidate',
+                if (client && ( client as WebSocket).readyState === WebSocket.OPEN) {
+                  ( client as WebSocket).send(JSON.stringify({
+                    type: 'iceCandidate',
                     candidate,
                     from: (ws as WebSocketWithId).id
                   }));
@@ -165,39 +176,64 @@ wss.on('connection', (ws: WebSocket) => {
           }
           break;
         }
-        case "disconnect": {
+        // case "disconnect": {
 
-          const roomId = socketToRoom[ws.id];
-          if (roomId && rooms[roomId]) {
-            // Remove the user from the room
-            rooms[roomId] = rooms[roomId].filter(user => user.id !== (ws as WebSocketWithId).id);
+        //   const roomId = socketToRoom[ws.id];
+        //   if (roomId && rooms[roomId]) {
+        //     // Remove the user from the room
+        //     rooms[roomId] = rooms[roomId].filter(user => user.id !== (ws as WebSocketWithId).id);
             
-            // Notify other users in the room about the disconnection
-            rooms[roomId].forEach(user => {
-              const client = Array.from(wss.clients)
-                .find(client => (client as WebSocketWithId).id === user.id);
+        //     // Notify other users in the room about the disconnection
+        //     rooms[roomId].forEach(user => {
+        //       const client = Array.from(wss.clients)
+        //         .find(client => (client as WebSocketWithId).id === user.id);
               
-              if (client && client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({ type: 'user_left', id: ws.id }));
-              }
-            });
+        //       if (client && ( client as WebSocket).readyState === WebSocket.OPEN) {
+        //         ( client as WebSocket).send(JSON.stringify({ type: 'user_left', id: ws.id }));
+        //       }
+        //     });
           
-            // Clean up if the room is empty
-            if (rooms[roomId].length === 0) {
-              delete rooms[roomId];
-            }
-          }
-          console.log(`User ${ws.id} disconnected`);
-          break;
-          }
+        //     // Clean up if the room is empty
+        //     if (rooms[roomId].length === 0) {
+        //       delete rooms[roomId];
+        //     }
+        //   }
+        //   console.log(`User ${ws.id} disconnected`);
+        //   break;
+        //   }
               
         default:
           break;
       }
     });
+
+    ws.on('close', () => {
+      const roomId = socketToRoom[ws.id];
+      if (roomId !== undefined && rooms[roomId]) {
+        // Remove the user
+        rooms[roomId] = rooms[roomId].filter(user => user.id !== ws.id);
+  
+        // Notify others
+        rooms[roomId].forEach(user => {
+          const client = [...wss.clients].find(c => (c as WebSocketWithId).id === user.id);
+          if (client && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'user_left', id: ws.id }));
+          }
+        });
+  
+        // Clean up empty room
+        if (rooms[roomId].length === 0) {
+          delete rooms[roomId];
+        }
+  
+        delete socketToRoom[ws.id];
+      }
+  
+      console.log(`User ${ws.id} disconnected`);
+    });
   });
 
-})
+
 
 // ---> change above code ws doesnit have custom handlers like joinRoom, offer, answer, candidate, disconnect
 

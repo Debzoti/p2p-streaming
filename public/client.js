@@ -1,3 +1,5 @@
+
+
 const localVideo = document.getElementById("localVideo");
 const button = document.getElementById("joinBtn");
 
@@ -15,23 +17,23 @@ const iceServers = {
         {
             urls: "stun:stun.l.google.com:19302" // Google's public STUN server
         },
-        {
-            urls: "turn:your.turn.server:3478", // Replace with your TURN server
-            username: "your_username", // Replace with your TURN server username
-            credential: "your_credential" // Replace with your TURN server credential
-        }
+        // {
+        //     urls: "turn:your.turn.server:3478", // Replace with your TURN server
+        //     username: "your_username", // Replace with your TURN server username
+        //     credential: "your_credential" // Replace with your TURN server credential
+        // }
     ]
 };
 
 //connect to the server by clicking button and send the roomId and name
-button.addEventListener("click", () => {
+button.addEventListener("click", async () => {
     
   
     const roomId = document.getElementById("roomInput").value;
     const name = prompt("Enter your name:");
 
     if (!roomId || !name) {
-        alert("Please enter a room ID and your name.");
+        alert("Please enter a room ID and your name."); 
         return;
     }
 
@@ -41,7 +43,7 @@ button.addEventListener("click", () => {
     
     
     //connect video stream to the server
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+   await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
     .then((stream) => {
         localStream.localStream = stream;
         localVideo.srcObject = stream;
@@ -53,7 +55,7 @@ button.addEventListener("click", () => {
 
     //first connect your local stream to the server
     
-    const ws = new WebSocket("ws://localhost:3000");
+     ws = new WebSocket("ws://localhost:3000");
     
     ws.onopen = () => {
         console.log("WebSocket connection established");
@@ -68,7 +70,7 @@ button.addEventListener("click", () => {
             switch (data.type) {
                 case "room_users":{
                     console.log("Room users:", data.users);
-                    await setUpPeerConnections();
+                    await setUpPeerConnection();
                     // Here you can handle the list of users in the room
                     if (data.users.length == 0) {
                         await createAndSendoffer();
@@ -79,15 +81,18 @@ button.addEventListener("click", () => {
                     break;
                 }
                 case "offer":{
+                    await handleOffer(data.offer);
                     break;
                 }
                 case "roomInfo":{
                     break;
                 }
                 case "answer":{
+                    await handleAnswer(data.answer);
                     break;
                 }
                 case "iceCandidate":{
+                    handleIceCandidate(data.candidate);
                     break;
                 }
                 default:
@@ -107,7 +112,7 @@ button.addEventListener("click", () => {
 })
 
 
-async function setUpPeerConnections(){
+async function setUpPeerConnection(){
      peerConnection = new RTCPeerConnection(iceServers);
 
      //add local streams
@@ -136,6 +141,55 @@ async function setUpPeerConnections(){
 }
 
 async function createAndSendoffer() {
-
+    try {
+        const offer = await peerConnection.createOffer();
+        const answer = await peerConnection.setLocalDescription(offer); //set local description
+        ws.send(JSON.stringify({type:"offer",offer}));
+        
+    } catch (error) {
+        console.error("creating and sebding error", error);
+        
+    }
 }
 
+async function handleOffer(offer){
+    try {
+        //setup peer connection
+        await setUpPeerConnection();
+    
+        //set remote description according to the offer
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer(); //create answer to that offer
+        peerConnection.setLocalDescription(answer); // chnages the local mode acc to answer sdp
+        ws.send(JSON.stringify(
+            {
+                type: "answer",
+                answer,
+            }
+        ))
+        
+    } catch (error) {
+        console.error("err handeling offer",error);
+        
+    }
+}
+
+async function handleAnswer(answer){
+    try {
+        
+        await peerConnection.setLocalDescription(new RTCSessionDescription(answer));
+    } catch (error) {
+        console.error(error);
+        
+    }
+}
+
+async function handleIceCandidate(iceCandidate) {
+    try {
+        await peerConnection.addIceCandidate(iceCandidate);
+        
+    } catch (error) {
+        console.error(error);
+        
+    }
+}
