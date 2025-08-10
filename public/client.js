@@ -2,7 +2,7 @@
 
 const localVideo = document.getElementById("localVideo");
 const button = document.getElementById("joinBtn");
-
+const remoteVideo = document.getElementById("remoteVideo")
 
 
 //store variable of stream to send to the server
@@ -10,8 +10,11 @@ let localStream ={
     localStream: null,
 };
 let peerConnection;
-let remoteStream = new MediaStream();
+let remoteStream ;
 let ws;
+let pendingCandidates = [];
+let currentRoomId = null;
+
 const iceServers = {
     iceServers: [
         {
@@ -31,12 +34,12 @@ button.addEventListener("click", async () => {
   
     const roomId = document.getElementById("roomInput").value;
     const name = prompt("Enter your name:");
-
     if (!roomId || !name) {
         alert("Please enter a room ID and your name."); 
         return;
     }
-
+    
+    currentRoomId = roomId;
 
     button.disabled = true; // Disable the button after clicking
     button.textContent = "Joining...";
@@ -70,14 +73,15 @@ button.addEventListener("click", async () => {
             switch (data.type) {
                 case "room_users":{
                     console.log("Room users:", data.users);
-                    await setUpPeerConnection();
+                    
+                    if (!peerConnection) {
+                        await setUpPeerConnection();
+                    }
+                    
                     // Here you can handle the list of users in the room
-                    if (data.users.length == 0) {
+                    if (data.users.length >0 ) {
                         await createAndSendoffer();
-                    } else {
-                        // If there are users in the room, you can handle them accordingly
-                        console.log("Users in the room:", data.users);
-                    }   
+                    }
                     break;
                 }
                 case "offer":{
@@ -114,37 +118,47 @@ button.addEventListener("click", async () => {
 
 async function setUpPeerConnection(){
      peerConnection = new RTCPeerConnection(iceServers);
-
+     remoteStream = new MediaStream();
+     
+     
      //add local streams
-        localStream.localStream.getTracks().forEach(track => {
-            peerConnection.addTrack(track, localStream.localStream);
-        });
+    localStream.localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream.localStream);
+    });
     
-        //handle ice candidates
-        peerConnection.onicecandidate = (event) => {
-            if (event.candidate) {
-                ws.send(JSON.stringify({
+    // remote stream handling
+   peerConnection.ontrack = (event) =>{
+    console.log("Remote track received:", event.streams);
+    if (!remoteVideo.srcObject) {
+        remoteVideo.srcObject = event.streams[0];
+    }
+   }
+    
+    //handle ice candidates
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            ws.send(JSON.stringify({
                     type: "iceCandidate",
                     candidate: event.candidate,
+                    roomId: currentRoomId
                 }));
             }
         }
-
-        // remote stream handling
-        peerConnection.ontrack = (event) => {
-            console.log("Remote track received");
-            remoteStream.addTrack(event.track);
-            const remoteVideo = document.getElementById("remoteVideo");
-            remoteVideo.srcObject = remoteStream;
-            remoteVideo.play();
-        }
+    
+        peerConnection.onconnectionstatechange = () => {
+            console.log("Connection State:", peerConnection.connectionState);
+        };
+        peerConnection.oniceconnectionstatechange = () => {
+            console.log("ICE State:", peerConnection.iceConnectionState);
+        };
+        
 }
 
 async function createAndSendoffer() {
     try {
         const offer = await peerConnection.createOffer();
-        const answer = await peerConnection.setLocalDescription(offer); //set local description
-        ws.send(JSON.stringify({type:"offer",offer}));
+        await peerConnection.setLocalDescription(offer); //set local description
+        ws.send(JSON.stringify({type:"offer",offer,roomId:currentRoomId}));
         
     } catch (error) {
         console.error("creating and sebding error", error);
@@ -154,17 +168,32 @@ async function createAndSendoffer() {
 
 async function handleOffer(offer){
     try {
-        //setup peer connection
-        await setUpPeerConnection();
+
+        if (!peerConnection) {
+            await setUpPeerConnection();
+
+        }
+       
     
         //set remote description according to the offer
         await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+
+        // Add buffered ICE candidates after remote description is set
+        for (const candidate of pendingCandidates) {
+            await peerConnection.addIceCandidate(candidate);
+        }
+        pendingCandidates = [];
+
+
+
         const answer = await peerConnection.createAnswer(); //create answer to that offer
-        peerConnection.setLocalDescription(answer); // chnages the local mode acc to answer sdp
+        await peerConnection.setLocalDescription(answer); // chnages the local mode acc to answer sdp
         ws.send(JSON.stringify(
             {
                 type: "answer",
                 answer,
+                roomId:currentRoomId
             }
         ))
         
@@ -177,7 +206,13 @@ async function handleOffer(offer){
 async function handleAnswer(answer){
     try {
         
-        await peerConnection.setLocalDescription(new RTCSessionDescription(answer));
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); //set remote after getting answer
+
+         // Add buffered ICE candidates
+         for (const candidate of pendingCandidates) {
+            await peerConnection.addIceCandidate(candidate);
+        }
+        pendingCandidates = [];
     } catch (error) {
         console.error(error);
         
@@ -185,11 +220,9 @@ async function handleAnswer(answer){
 }
 
 async function handleIceCandidate(iceCandidate) {
-    try {
+    if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
         await peerConnection.addIceCandidate(iceCandidate);
-        
-    } catch (error) {
-        console.error(error);
-        
+    } else {
+        pendingCandidates.push(iceCandidate);
     }
 }
