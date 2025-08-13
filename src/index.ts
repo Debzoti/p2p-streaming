@@ -1,19 +1,30 @@
 //signaling server for  peer 2 peer connections
 import express from 'express';
-import { Server } from 'ws';
-import http from 'http';
+import http, { Server } from 'http';
 import WebSocket from 'ws';
 import { WebSocketWithId } from '../typings/ws'; // Import the extended WebSocket interface
 import {v6 as uuidv6} from 'uuid';
 import crypto from 'crypto';
 import { join } from 'path';
+import path from 'path';
 
 
 
 const app = express();
 const server = http.createServer(app);
 
-const wss = new Server({ server });
+
+
+
+// serve client static files (if not already)
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// explicitly serve HLS assets
+app.use('/hls', express.static(path.join(__dirname, '..', 'public', 'hls')));
+
+
+
+const wss = new WebSocket.Server({ server });
 app.get('/', (req, res) => {
   res.send('WebSocket signaling server is running');
 });

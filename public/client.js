@@ -22,8 +22,8 @@ const iceServers = {
         },
         // {
         //     urls: "turn:your.turn.server:3478", // Replace with your TURN server
-        //     username: "your_username", // Replace with your TURN server username
-        //     credential: "your_credential" // Replace with your TURN server credential
+        //     username: "your_ume
+        //     credential: "your_credential" // Replace with yoursername", // Replace with your TURN server userna TURN server credential
         // }
     ]
 };
