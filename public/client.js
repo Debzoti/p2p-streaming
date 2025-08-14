@@ -79,7 +79,10 @@ button.addEventListener("click", async () => {
                     }
                     
                     // Here you can handle the list of users in the room
-                    if (data.users.length >0 ) {
+                    const otherUsers = data.users.filter(u => u.id !== ws.id);
+                    console.log("Other users in the room:", otherUsers);
+                    if (otherUsers.length > 0) {
+                        console.log("Creating offer to other users");
                         await createAndSendoffer();
                     }
                     break;
@@ -111,7 +114,28 @@ button.addEventListener("click", async () => {
         }
         ws.onclose = () => {
             console.log("WebSocket connection closed");
-        }
+            alert("Disconnected from the room.");
+        
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+        
+            if (localStream?.localStream) {
+                localStream.localStream.getTracks().forEach(track => track.stop());
+                localStream.localStream = null;
+            }
+        
+            if (remoteVideo.srcObject) {
+                remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+                remoteVideo.srcObject = null;
+            }
+        
+            button.disabled = false;
+            button.textContent = "Join Room";
+            document.getElementById("roomInput").value = "";
+        };
+        
         
 })
 
@@ -146,11 +170,16 @@ async function setUpPeerConnection(){
         }
     
         peerConnection.onconnectionstatechange = () => {
-            console.log("Connection State:", peerConnection.connectionState);
+            console.log("🔹 PeerConnection state:", peerConnection.connectionState);
         };
+        
         peerConnection.oniceconnectionstatechange = () => {
-            console.log("ICE State:", peerConnection.iceConnectionState);
+            console.log("🔹 ICE connection state:", peerConnection.iceConnectionState);
         };
+        
+        peerConnection.onicegatheringstatechange = () => {
+            console.log("🔹 ICE gathering state:", peerConnection.iceGatheringState);
+        };        
         
 }
 

@@ -1,30 +1,38 @@
 //signaling server for  peer 2 peer connections
 import express from 'express';
 import http, { Server } from 'http';
-import WebSocket from 'ws';
+import {WebSocket, WebSocketServer} from 'ws';
 import { WebSocketWithId } from '../typings/ws'; // Import the extended WebSocket interface
 import {v6 as uuidv6} from 'uuid';
 import crypto from 'crypto';
 import { join } from 'path';
 import path from 'path';
-
+import { fileURLToPath } from 'url';
 
 
 const app = express();
 const server = http.createServer(app);
 
 
-
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 // serve client static files (if not already)
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // explicitly serve HLS assets
-app.use('/hls', express.static(path.join(__dirname, '..', 'public', 'hls')));
+app.use('/hls', express.static(path.join(__dirname, 'public', 'hls'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.m3u8')) {
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    } else if (path.endsWith('.ts')) {
+      res.setHeader('Content-Type', 'video/mp2t');
+    }
+  }
+}));
 
 
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 app.get('/', (req, res) => {
   res.send('WebSocket signaling server is running');
 });
@@ -97,7 +105,7 @@ wss.on('connection', (ws: WebSocket) => {
           
           // send a list of joined users to the new user
           const users = rooms[roomIdNumber].filter(user => user.id !== ws.id);
-          ws.send(JSON.stringify({ type: 'room_users', users }));
+          ws.send(JSON.stringify({ type: 'room_users', users, wsId: ws.id }));
           
           //send the updated room information to the user
           const roomInfo = {
