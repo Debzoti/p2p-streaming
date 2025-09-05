@@ -14,6 +14,7 @@ COPY src ./src
 COPY public ./public
 COPY tools ./tools
 COPY start.sh ./
+
 # Install dev tools globally
 RUN npm install -g tsx typescript nodemon
 RUN chmod +x start.sh

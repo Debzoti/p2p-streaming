@@ -1,3 +1,5 @@
+"use strict"
+
 import {spawn} from 'node:child_process';
 import {resolve} from 'path';
 import {fileURLToPath} from 'url';

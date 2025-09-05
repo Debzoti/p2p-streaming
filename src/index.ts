@@ -1,8 +1,8 @@
 //signaling server for  peer 2 peer connections
 import express from 'express';
 import http, { Server } from 'http';
-import {WebSocket, WebSocketServer} from 'ws';
-import { WebSocketWithId } from '../typings/ws'; // Import the extended WebSocket interface
+import { WebSocketServer} from 'ws';
+import { WebSocketWithId, WebSocket } from '../typings/ws'; // Import the extended WebSocket interface
 import {v6 as uuidv6} from 'uuid';
 import crypto from 'crypto';
 import { join } from 'path';
@@ -113,113 +113,13 @@ wss.on('connection', (ws: WebSocket) => {
             users: rooms[roomIdNumber].map(user => ({ id: user.id, name: user.name })),
           };
           ws.send(JSON.stringify({
-             type: 'roomInfo',
+              type: 'roomInfo',
               roomInfo 
             }));
           console.log(`User ${name} joined room ${roomIdNumber}`);
           break;
         }
           
-        case "offer" :{
-          const { roomId, offer } = data;
-          const roomIdNumber = parseInt(roomId, 10);
-          
-          if (rooms[roomIdNumber]) {
-          // Broadcast the offer to all clients in the room except the sender
-          rooms[roomIdNumber].forEach(user => {
-              if (user.id !== (ws as WebSocketWithId).id) {
-              const client = Array.from(wss.clients)
-              .find(client => 
-                  (client as WebSocketWithId).id === user.id);
-          
-              if (client && ( client as WebSocket).readyState === WebSocket.OPEN) {
-                ( client as WebSocket).send(JSON.stringify(
-                      { 
-                      type: 'offer', 
-                      offer,
-                      from: (ws as WebSocketWithId).id 
-                  }));
-              }
-              }
-          });
-          }
-          break;
-        }
-        case "answer": {
-
-
-
-          const { roomId, answer } = data;
-          const roomIdNumber = parseInt(roomId, 10);
-          
-          if (rooms[roomIdNumber]) {
-            // Broadcast the answer to all clients in the room except the sender
-            rooms[roomIdNumber].forEach(user => {
-              if (user.id !== (ws as WebSocketWithId).id) {
-                const client = Array.from(wss.clients)
-                  .find(client => (client as WebSocketWithId).id === user.id);
-          
-                if (client && ( client as WebSocket).readyState === WebSocket.OPEN) {
-                  ( client as WebSocket).send(JSON.stringify({
-                    type: 'answer',
-                    answer,
-                    from: (ws as WebSocketWithId).id
-                  }));
-                }
-              }
-            });
-          }
-          break;
-        }
-        case "iceCandidate": {
-
-          const { roomId, candidate } = data;
-          const roomIdNumber = parseInt(roomId, 10);
-          
-          if (rooms[roomIdNumber]) {
-            // Broadcast the ICE candidate to all clients in the room except the sender
-            rooms[roomIdNumber].forEach(user => {
-              if (user.id !== (ws as WebSocketWithId).id) {
-                const client = Array.from(wss.clients)
-                  .find(client => (client as WebSocketWithId).id === user.id);
-          
-                if (client && ( client as WebSocket).readyState === WebSocket.OPEN) {
-                  ( client as WebSocket).send(JSON.stringify({
-                    type: 'iceCandidate',
-                    candidate,
-                    from: (ws as WebSocketWithId).id
-                  }));
-                }
-              }
-            });
-          }
-          break;
-        }
-        // case "disconnect": {
-
-        //   const roomId = socketToRoom[ws.id];
-        //   if (roomId && rooms[roomId]) {
-        //     // Remove the user from the room
-        //     rooms[roomId] = rooms[roomId].filter(user => user.id !== (ws as WebSocketWithId).id);
-            
-        //     // Notify other users in the room about the disconnection
-        //     rooms[roomId].forEach(user => {
-        //       const client = Array.from(wss.clients)
-        //         .find(client => (client as WebSocketWithId).id === user.id);
-              
-        //       if (client && ( client as WebSocket).readyState === WebSocket.OPEN) {
-        //         ( client as WebSocket).send(JSON.stringify({ type: 'user_left', id: ws.id }));
-        //       }
-        //     });
-          
-        //     // Clean up if the room is empty
-        //     if (rooms[roomId].length === 0) {
-        //       delete rooms[roomId];
-        //     }
-        //   }
-        //   console.log(`User ${ws.id} disconnected`);
-        //   break;
-        //   }
               
         default:
           break;
@@ -234,7 +134,7 @@ wss.on('connection', (ws: WebSocket) => {
   
         // Notify others
         rooms[roomId].forEach(user => {
-          const client = [...wss.clients].find(c => (c as WebSocketWithId).id === user.id);
+          const client = [...wss.clients].find(c => (c as WebSocket).id === user.id);
           if (client && client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'user_left', id: ws.id }));
           }
