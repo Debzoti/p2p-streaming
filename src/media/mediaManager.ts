@@ -20,12 +20,52 @@ let router:mediasoupTypes.Router<mediasoupTypes.AppData>;
 let transport:mediasoupTypes.WebRtcTransport;
 let producer:mediasoupTypes.Producer<mediasoupTypes.AppData>;
 
-
 //manage the producers transports in map for cleanup later
+//setup rooms producer, producer ownert in map
 const transports:Map<string,mediasoupTypes.WebRtcTransport> = new Map();
 const producers:Map<string,mediasoupTypes.Producer<mediasoupTypes.AppData>> = new Map();
 const producerOwner:Map<string,string> = new Map(); //map producer id to socket id  
-const peerTransport:Map<string,string> = new Map(); //map socket id to transport id
+const peerTransports:Map<string,string[]> = new Map(); //map socket id to transport id
+
+/*
+
+                        +--------------------+
+                    |     wsId: "peer1"  |
+                    +--------------------+
+                            | (owns)
+                            v
+            +-------------------------------------+
+            | peerTransports                      |
+            |  "peer1" -> [t1, t2]                |
+            +-------------------------------------+
+                    |                 |
+                    |                 |
+                    v                 v
+            +----------------+   +----------------+
+            | transports     |   | transports     |
+            |  t1 -> object  |   |  t2 -> object  |
+            +----------------+   +----------------+
+                    |
+                    |  (used to produce audio/video)
+                    v
+            +--------------------+
+            | producers          |
+            |  p1 -> ProducerObj |
+            |  p2 -> ProducerObj |
+            +--------------------+
+                    |
+                    |  (who owns each producer?)
+                    v
+            +--------------------------+
+            | producerOwner            |
+            |  p1 -> "peer1"           |
+            |  p2 -> "peer1"           |
+            +--------------------------+
+
+*/
+
+
+
 
 
 //initialize the media manager
@@ -62,6 +102,20 @@ async function initApp() {
                 { type: "goog-remb" }
             ],
             
+        },{
+            kind: 'video',
+            mimeType: 'video/VP8',
+            clockRate: 90000,
+            preferredPayloadType: 101,
+            parameters: {
+                "x-google-start-bitrate": 1000,
+                },
+            rtcpFeedback: [
+                { type: "nack" },
+                { type: "nack", parameter: "pli" },
+                { type: "ccm", parameter: "fir" },
+                { type: "goog-remb" }
+            ],
         }
     ]
     router  = await worker.createRouter({
@@ -69,25 +123,28 @@ async function initApp() {
     })
 
     console.log('Router created with id:', router.id);
-
     
 }
 
-
+//tesing 
 async function getRouterRtpCapabilites(){
     if(!router){
+        console.log('Router not initialized');
+        
         throw new Error('Router not initialized');
     }
     return router.rtpCapabilities;
 }
 
-async function createWebrtcTransport(){
+
+
+async function createWebrtcTransport(wsId:string){
 
     //transport webrtc transport through which we will send media
 
-     transport = await router.createWebRtcTransport({
+        transport = await router.createWebRtcTransport({
         listenIps: [
-            {ip:'127.0.0.1',announcedIp:'127.0.0.1'}
+            {ip:'127.0.0.1',announcedIp: undefined},
         ],
 
         enableUdp: true,
@@ -99,6 +156,21 @@ async function createWebrtcTransport(){
     console.log(`Transport created: ${transport.id}`);
 
     //record the transports in map fro cleanup later
+    transports.set(transport.id, transport);
+
+    const list = peerTransports.get(wsId) ?? [];
+    list.push(transport.id);
+    peerTransports.set(wsId, list);
+
+    transport.on('dtlsstatechange', (dtlsState) => {
+        if (dtlsState === 'closed') {
+            console.log('Transport DTLS state closed, closing transport');
+            transport.close();
+            transports.delete(transport.id);
+        }
+    });
+
+
 
     return {
         id: transport.id,
@@ -108,7 +180,10 @@ async function createWebrtcTransport(){
     };
 }
 
-async function connectTransport(transportId:string, dtlsParameters:mediasoupTypes.DtlsParameters){
+async function connectTransport(
+        transportId:string,
+        dtlsParameters:mediasoupTypes.DtlsParameters
+    ){
     const transport = transports.get(transportId); //get the transportid from map
     if(!transport){
         throw new Error('Transport not found');
@@ -200,3 +275,45 @@ async function createConsumer(
 }
 
 //cleanup all the resources when a peer disconnects
+async function cleanupPeer(wsId:string){
+    //get all the transport ids for this peer
+    const transportIds = peerTransports.get(wsId);
+    if(transportIds){
+        for(const transportId of transportIds){
+            const transport = transports.get(transportId);
+            if(transport){
+                //close the transport
+                transport.close();
+                transports.delete(transportId);
+                console.log(`Transport closed: ${transportId}`);
+            }
+        }
+        peerTransports.delete(wsId);
+    }
+
+    //get all the producers owned by this peer
+    for(const [producerId, ownerWsId] of producerOwner.entries()){
+        if(ownerWsId === wsId){
+            const producer = producers.get(producerId);
+            if(producer){
+                //close the producer
+                producer.close();
+                producers.delete(producerId);
+                producerOwner.delete(producerId);
+                console.log(`Producer closed: ${producerId}`);
+            }
+        }
+    }
+
+    console.log(`Cleanup completed for peer: ${wsId}`);
+}
+
+export {
+    initApp,
+    getRouterRtpCapabilites,
+    createWebrtcTransport,
+    connectTransport,
+    produce,
+    createConsumer,
+    cleanupPeer,
+};
