@@ -16,10 +16,10 @@ import {
 //handle signalling messages
 
     const handleSignallingMessege = async (
-        ws: WebSocket & {id : string},
+        ws: WebSocketWithId & {id : string},
         wss: WebSocketServer,
         parsedData: string,
-        rooms: { [roomId: string]: { id: string; name: string }[] },
+        rooms: { [roomId: number]: { id: string; name: string }[] }, //room name
         socketToRoom:  { [socketId: string]: number } 
         ) => {
         const { type } = JSON.parse(parsedData);
@@ -30,6 +30,7 @@ import {
 
                 
                 case "joinRoom":{
+                    //const data = JSON.parse(parsedData);
                     const data = JSON.parse(parsedData);
                     const { roomId, name } = data;
                     
@@ -82,11 +83,24 @@ import {
                 }
 
                 case "getRouterRtpCapabilities": {
-                    const rtpCaps = getRouterRtpCapabilites();
+                    const rtpCaps = await getRouterRtpCapabilites();
                     ws.send(
                         JSON.stringify({
                             type: "routerRtpCapabilities",
                             payload: await rtpCaps,
+                        })
+                    );
+                    return;
+                }
+                
+                
+                case "createWebrtcTransport": {
+                    const wsId = ws.id;
+                    const transport = await createWebrtcTransport(wsId);
+                    ws.send(
+                        JSON.stringify({
+                            type: "connectWebrtcTransportResponse",
+                            payload: transport,
                         })
                     );
                     return;
@@ -103,19 +117,6 @@ import {
                     );
                     return;
                 }
-
-                case "createWebrtcTransport": {
-                    const wsId = ws.id;
-                    const transport = await createWebrtcTransport(wsId);
-                    ws.send(
-                        JSON.stringify({
-                            type: "connectWebrtcTransportResponse",
-                            payload: transport,
-                        })
-                    );
-                    return;
-                }
-                
 
 
                 case "produce": {

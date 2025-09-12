@@ -144,7 +144,7 @@ async function createWebrtcTransport(wsId:string){
 
         transport = await router.createWebRtcTransport({
         listenIps: [
-            {ip:'127.0.0.1',announcedIp: undefined},
+            {ip:'0.0.0.0',announcedIp: undefined},
         ],
 
         enableUdp: true,
@@ -171,7 +171,6 @@ async function createWebrtcTransport(wsId:string){
     });
 
 
-
     return {
         id: transport.id,
         iceParameters: transport.iceParameters,
@@ -188,6 +187,7 @@ async function connectTransport(
     if(!transport){
         throw new Error('Transport not found');
     }
+    
     await transport.connect({dtlsParameters});
     console.log(`Transport connected: ${transport.id}`);
 }

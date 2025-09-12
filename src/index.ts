@@ -8,9 +8,9 @@ import crypto from 'crypto';
 import { join } from 'path';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { handleSignallingMessege, handleDisconnect } from './signalling/handlers.js';
+import { handleSignallingMessege, handleDisconnect } from './signalling/handlers';
 import { initApp } from './media/mediaManager.js';
-import { getRouterRtpCapabilites } from './media/mediaManager';
+import { getRouterRtpCapabilites, createWebrtcTransport } from './media/mediaManager';
 const app = express();
 const server = http.createServer(app);
 
@@ -42,13 +42,38 @@ app.get('/', (req, res) => {
 });
 
 initApp();
+ 
+// //test the rourte 
+// app.get('/rtp-capabilities', async (req, res) => {
+//   const cap = await getRouterRtpCapabilites();
+//   console.log(  'Router RTP Capabilities:', cap);
+//   res.json(cap);
+// });
 
-//test the rourte 
-app.get('/rtp-capabilities', async (req, res) => {
-  const cap = await getRouterRtpCapabilites();
-  console.log('Router RTP Capabilities:', cap);
-  res.json(cap);
-});
+
+// //test transport creation
+// app.post('/create-transport', async (req, res) => {
+//   // In a real application, you would get the wsId from the authenticated user session
+//   const wsId = uuidv6();
+//   try {
+//     const transport = await createWebrtcTransport(wsId);
+//     console.log('Created transport:', transport);
+//     res.json(transport);
+//   } catch (error : any) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+
+
+
+
+
+
+
+
+
+
+
 
 //manage new user joining rooms
   //each room have roomId and name
@@ -59,9 +84,14 @@ wss.on('connection', (ws: WebSocket) => {
         
         ws.on('message', async (message: Buffer) =>{
 
+
+          console.log("RAW TYPE:", typeof message);
+          console.log("RAW VALUE:", message);
+          console.log("AS STRING:", message.toString());
+
           let parsedData : string;
             try {
-              parsedData =JSON.parse(message.toString())
+              parsedData = message.toString();
 
 
               //assig an id to each websocket connection
